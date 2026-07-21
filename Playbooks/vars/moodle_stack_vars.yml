@@ -9,6 +9,7 @@ db_pass: "Moodle2026!"
 db_root_pass: "RootMoodle2026!"
 
 # Almacenamiento
-storage_class: "gp3-csi" # Cambia por tu StorageClass en OpenShift (ej. ocs-storagecluster-ceph-rbd, etc.)
+storage_class: "px-shared-sc" # Cambia por tu StorageClass en OpenShift (ej. ocs-storagecluster-ceph-rbd, etc.)
 storage_db_size: "10Gi"
 storage_moodle_size: "20Gi"
+storage_class_db: "px-csi-db"

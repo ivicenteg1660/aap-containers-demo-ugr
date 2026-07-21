@@ -45,6 +45,7 @@
             name: "{{ moodle_prefix }}-db-pvc"
             namespace: "{{ moodle_namespace }}"
           spec:
+            storageClassName: "{{ storage_class_db }}"
             accessModes:
               - ReadWriteOnce
             resources:
@@ -61,6 +62,7 @@
             name: "{{ moodle_prefix }}-data-pvc"
             namespace: "{{ moodle_namespace }}"
           spec:
+            storageClassName: "{{ storage_class }}"
             accessModes:
               - ReadWriteOnce # Si escalas pods a >1 replicas, cambia a ReadWriteMany
             resources:
