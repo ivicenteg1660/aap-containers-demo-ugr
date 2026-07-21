@@ -29,10 +29,10 @@
             namespace: "{{ moodle_namespace }}"
           type: Opaque
           stringData:
-            mariadb-root-password: "{{ db_root_pass }}"
-            mariadb-password: "{{ db_pass }}"
-            mariadb-database: "{{ db_name }}"
-            mariadb-user: "{{ db_user }}"
+            mysql-root-password: "{{ db_root_pass }}"
+            mysql-password: "{{ db_pass }}"
+            mysql-database: "{{ db_name }}"
+            mysql-user: "{{ db_user }}"
 
     # 3. PersistentVolumeClaims (PVCs) en Portworx
     - name: "Crear PVC para MariaDB"
@@ -98,26 +98,26 @@
                   - name: mariadb
                     image: registry.redhat.io/rhel9/mariadb-1011:latest
                     env:
-                      - name: MARIADB_ROOT_PASSWORD
+                      - name: MYSQL_ROOT_PASSWORD
                         valueFrom:
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
-                            key: mariadb-root-password
-                      - name: MARIADB_USER
+                            key: mysql-root-password
+                      - name: MYSQL_USER
                         valueFrom:
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
-                            key: mariadb-user
-                      - name: MARIADB_PASSWORD
+                            key: mysql-user
+                      - name: MYSQL_PASSWORD
                         valueFrom:
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
-                            key: mariadb-password
-                      - name: MARIADB_DATABASE
+                            key: mysql-password
+                      - name: MYSQL_DATABASE
                         valueFrom:
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
-                            key: mariadb-database
+                            key: mysql-database
                       - name: MARIADB_CHARACTER_SET
                         value: "utf8mb4"
                       - name: MARIADB_COLLATE
@@ -188,17 +188,17 @@
                         valueFrom:
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
-                            key: mariadb-user
+                            key: mysql-user
                       - name: MOODLE_DATABASE_PASSWORD
                         valueFrom:
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
-                            key: mariadb-password
+                            key: mysql-password
                       - name: MOODLE_DATABASE_NAME
                         valueFrom:
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
-                            key: mariadb-database
+                            key: mysql-database
                       - name: MOODLE_USERNAME
                         value: "admin"
                       - name: MOODLE_PASSWORD
