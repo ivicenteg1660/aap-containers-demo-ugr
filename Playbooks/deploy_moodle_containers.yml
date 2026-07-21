@@ -62,7 +62,7 @@
             name: "{{ moodle_prefix }}-data-pvc"
             namespace: "{{ moodle_namespace }}"
           spec:
-            storageClassName: "{{ storage_class_data }}" # Usar la SC corregida para Portworx
+            storageClassName: "{{ storage_class }}" # Usar la SC corregida para Portworx
             accessModes:
               - ReadWriteMany
             resources:
