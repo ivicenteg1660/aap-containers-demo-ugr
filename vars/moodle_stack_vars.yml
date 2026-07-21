@@ -1,5 +1,5 @@
 # Definición de Namespace e Identificador
-moodle_namespace: "moodle-demo"
+moodle_namespace: "Demo-moodle-containers"
 moodle_prefix: "moodle"
 
 # Configuración de Base de Datos
