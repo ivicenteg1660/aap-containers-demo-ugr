@@ -1,0 +1,273 @@
+---
+- name: Despliegue Nativo de Moodle en Contenedores OpenShift
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/moodle_stack_vars.yml
+
+  tasks:
+    # 1. Namespace
+    - name: "Asegurar que existe el Namespace"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ moodle_namespace }}"
+
+    # 2. Secret con credenciales
+    - name: "Crear Secret para la Base de Datos y Moodle"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ moodle_prefix }}-db-secrets"
+            namespace: "{{ moodle_namespace }}"
+          type: Opaque
+          stringData:
+            mariadb-root-password: "{{ db_root_pass }}"
+            mariadb-password: "{{ db_pass }}"
+            mariadb-database: "{{ db_name }}"
+            mariadb-user: "{{ db_user }}"
+
+    # 3. PersistentVolumeClaims (PVCs)
+    - name: "Crear PVC para MariaDB"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ moodle_prefix }}-db-pvc"
+            namespace: "{{ moodle_namespace }}"
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: "{{ storage_db_size }}"
+
+    - name: "Crear PVC para Moodledata y Moodle App"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ moodle_prefix }}-data-pvc"
+            namespace: "{{ moodle_namespace }}"
+          spec:
+            accessModes:
+              - ReadWriteOnce # Si escalas pods a >1 replicas, cambia a ReadWriteMany
+            resources:
+              requests:
+                storage: "{{ storage_moodle_size }}"
+
+    # 4. Deployment de MariaDB
+    - name: "Desplegar Pod/Deployment de MariaDB"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: "{{ moodle_prefix }}-db"
+            namespace: "{{ moodle_namespace }}"
+            labels:
+              app: "{{ moodle_prefix }}"
+              tier: database
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: "{{ moodle_prefix }}"
+                tier: database
+            template:
+              metadata:
+                labels:
+                  app: "{{ moodle_prefix }}"
+                  tier: database
+              spec:
+                containers:
+                  - name: mariadb
+                    image: docker.io/bitnami/mariadb:10.11
+                    env:
+                      - name: MARIADB_ROOT_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: "{{ moodle_prefix }}-db-secrets"
+                            key: mariadb-root-password
+                      - name: MARIADB_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: "{{ moodle_prefix }}-db-secrets"
+                            key: mariadb-user
+                      - name: MARIADB_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: "{{ moodle_prefix }}-db-secrets"
+                            key: mariadb-password
+                      - name: MARIADB_DATABASE
+                        valueFrom:
+                          secretKeyRef:
+                            name: "{{ moodle_prefix }}-db-secrets"
+                            key: mariadb-database
+                      - name: MARIADB_CHARACTER_SET
+                        value: "utf8mb4"
+                      - name: MARIADB_COLLATE
+                        value: "utf8mb4_unicode_ci"
+                    ports:
+                      - containerPort: 3306
+                        name: mysql
+                    volumeMounts:
+                      - name: db-storage
+                        mountPath: /bitnami/mariadb
+                volumes:
+                  - name: db-storage
+                    persistentVolumeClaim:
+                      claimName: "{{ moodle_prefix }}-db-pvc"
+
+    # 5. Service interno para la Base de Datos
+    - name: "Crear Service para MariaDB"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ moodle_prefix }}-db-svc"
+            namespace: "{{ moodle_namespace }}"
+          spec:
+            selector:
+              app: "{{ moodle_prefix }}"
+              tier: database
+            ports:
+              - port: 3306
+                targetPort: 3306
+
+    # 6. Deployment de Moodle
+    - name: "Desplegar Pod/Deployment de Moodle"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: "{{ moodle_prefix }}-web"
+            namespace: "{{ moodle_namespace }}"
+            labels:
+              app: "{{ moodle_prefix }}"
+              tier: frontend
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: "{{ moodle_prefix }}"
+                tier: frontend
+            template:
+              metadata:
+                labels:
+                  app: "{{ moodle_prefix }}"
+                  tier: frontend
+              spec:
+                containers:
+                  - name: moodle
+                    image: docker.io/bitnami/moodle:4.3
+                    env:
+                      - name: MOODLE_DATABASE_HOST
+                        value: "{{ moodle_prefix }}-db-svc"
+                      - name: MOODLE_DATABASE_PORT_NUMBER
+                        value: "3306"
+                      - name: MOODLE_DATABASE_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: "{{ moodle_prefix }}-db-secrets"
+                            key: mariadb-user
+                      - name: MOODLE_DATABASE_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: "{{ moodle_prefix }}-db-secrets"
+                            key: mariadb-password
+                      - name: MOODLE_DATABASE_NAME
+                        valueFrom:
+                          secretKeyRef:
+                            name: "{{ moodle_prefix }}-db-secrets"
+                            key: mariadb-database
+                      - name: MOODLE_USERNAME
+                        value: "admin"
+                      - name: MOODLE_PASSWORD
+                        value: "MoodleAdmin2026!"
+                      - name: MOODLE_EMAIL
+                        value: "admin@example.com"
+                    ports:
+                      - containerPort: 8080
+                        name: http
+                    volumeMounts:
+                      - name: moodle-storage
+                        mountPath: /bitnami/moodle
+                      - name: moodledata-storage
+                        mountPath: /bitnami/moodledata
+                volumes:
+                  - name: moodle-storage
+                    persistentVolumeClaim:
+                      claimName: "{{ moodle_prefix }}-data-pvc"
+                  - name: moodledata-storage
+                    persistentVolumeClaim:
+                      claimName: "{{ moodle_prefix }}-data-pvc"
+
+    # 7. Service para el Frontend Moodle
+    - name: "Crear Service para Moodle Web"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ moodle_prefix }}-web-svc"
+            namespace: "{{ moodle_namespace }}"
+          spec:
+            selector:
+              app: "{{ moodle_prefix }}"
+              tier: frontend
+            ports:
+              - port: 8080
+                targetPort: 8080
+                name: http
+
+    # 8. Route de OpenShift
+    - name: "Exponer Moodle mediante Route de OpenShift (Edge TLS)"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: "{{ moodle_prefix }}-route"
+            namespace: "{{ moodle_namespace }}"
+          spec:
+            to:
+              kind: Service
+              name: "{{ moodle_prefix }}-web-svc"
+            port:
+              targetPort: http
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+
+    # 9. Obtención y Mapeo de URL resultante
+    - name: "Obtener URL pública asignada"
+      kubernetes.core.k8s_info:
+        api_version: route.openshift.io/v1
+        kind: Route
+        name: "{{ moodle_prefix }}-route"
+        namespace: "{{ moodle_namespace }}"
+      register: moodle_route_info
+
+    - name: "Exportar URL pública a AAP"
+      ansible.builtin.set_stats:
+        data:
+          moodle_public_url: "https://{{ moodle_route_info.resources[0].spec.host }}"
