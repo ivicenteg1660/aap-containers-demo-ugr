@@ -62,7 +62,7 @@
             name: "{{ moodle_prefix }}-data-pvc"
             namespace: "{{ moodle_namespace }}"
           spec:
-            storageClassName: "{{ storage_class_data }}"
+            storageClassName: "{{ storage_class }}"
             accessModes:
               - ReadWriteMany
             resources:
