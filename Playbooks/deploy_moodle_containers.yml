@@ -163,8 +163,8 @@
             name: "{{ moodle_prefix }}-web-image"
             namespace: "{{ moodle_namespace }}"
 
-    # 6.2 BuildConfig que clona Moodle oficial sobre la imagen de PHP de Red Hat
-    - name: "Crear BuildConfig usando imagen PHP de Red Hat"
+    # BuildConfig con Dockerfile inline para incluir la extensión PHP requerida por Moodle
+    - name: "Crear BuildConfig con Dockerfile para incluir php-sodium"
       kubernetes.core.k8s:
         state: present
         definition:
@@ -178,13 +178,19 @@
               type: Git
               git:
                 uri: "https://github.com/moodle/moodle.git"
-                ref: "MOODLE_403_STABLE" # O la rama oficial que prefieras
+                ref: "MOODLE_403_STABLE"
+              dockerfile: |
+                FROM registry.redhat.io/ubi9/php-81:latest
+                USER root
+                # Instalar la extensión sodium requerida por Moodle
+                RUN dnf install -y php-sodium libsodium && dnf clean all
+                USER 1001
+                # Indicar a Composer que no re-evalúe las dependencias de red de la plataforma
+                ENV COMPOSER_ARGS="--ignore-platform-reqs --no-dev"
+                RUN /usr/libexec/s2i/assemble
+                CMD /usr/libexec/s2i/run
             strategy:
-              type: Source
-              sourceStrategy:
-                from:
-                  kind: DockerImage
-                  name: "registry.redhat.io/ubi9/php-81:latest" # Imagen Oficial Red Hat
+              type: Docker
             output:
               to:
                 kind: ImageStreamTag
