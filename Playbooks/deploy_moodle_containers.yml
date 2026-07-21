@@ -17,7 +17,7 @@
           metadata:
             name: "{{ moodle_namespace }}"
 
-    # 2. Secrets
+    # 2. Secrets (Mantenemos tus claves con prefijo mysql-*)
     - name: "Crear Secret para la Base de Datos y Moodle"
       kubernetes.core.k8s:
         state: present
@@ -62,14 +62,14 @@
             name: "{{ moodle_prefix }}-data-pvc"
             namespace: "{{ moodle_namespace }}"
           spec:
-            storageClassName: "{{ storage_class }}"
+            storageClassName: "{{ storage_class_data }}" # Usar la SC corregida para Portworx
             accessModes:
               - ReadWriteMany
             resources:
               requests:
                 storage: "{{ storage_moodle_size }}"
 
-    # 4. Deployment: MariaDB
+    # 4. Deployment: MariaDB (Red Hat Oficial)
     - name: "Desplegar Pod/Deployment de MariaDB"
       kubernetes.core.k8s:
         state: present
@@ -97,6 +97,7 @@
                 containers:
                   - name: mariadb
                     image: registry.redhat.io/rhel9/mariadb-1011:latest
+                    imagePullPolicy: IfNotPresent
                     env:
                       - name: MYSQL_ROOT_PASSWORD
                         valueFrom:
@@ -127,7 +128,7 @@
                         name: mysql
                     volumeMounts:
                       - name: db-storage
-                        mountPath: /bitnami/mariadb
+                        mountPath: /var/lib/mysql/data # Ajustado para la imagen de RHEL 9
                 volumes:
                   - name: db-storage
                     persistentVolumeClaim:
@@ -151,7 +152,7 @@
               - port: 3306
                 targetPort: 3306
 
-    # 6. Deployment: Moodle
+    # 6. Deployment: Moodle (Con subPath corregido)
     - name: "Desplegar Pod/Deployment de Moodle"
       kubernetes.core.k8s:
         state: present
@@ -209,15 +210,14 @@
                       - containerPort: 8080
                         name: http
                     volumeMounts:
-                      - name: moodle-storage
+                      - name: moodle-data-vol
                         mountPath: /bitnami/moodle
-                      - name: moodledata-storage
+                        subPath: moodle-app
+                      - name: moodle-data-vol
                         mountPath: /bitnami/moodledata
+                        subPath: moodledata-files
                 volumes:
-                  - name: moodle-storage
-                    persistentVolumeClaim:
-                      claimName: "{{ moodle_prefix }}-data-pvc"
-                  - name: moodledata-storage
+                  - name: moodle-data-vol
                     persistentVolumeClaim:
                       claimName: "{{ moodle_prefix }}-data-pvc"
 
