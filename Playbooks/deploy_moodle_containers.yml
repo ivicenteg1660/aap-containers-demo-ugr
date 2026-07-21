@@ -152,8 +152,46 @@
               - port: 3306
                 targetPort: 3306
 
-    # 6. Deployment: Moodle (Con subPath corregido)
-    - name: "Desplegar Pod/Deployment de Moodle"
+   # 6.1 ImageStream para almacenar la imagen compilada de Moodle
+    - name: "Crear ImageStream para Moodle Web"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: image.openshift.io/v1
+          kind: ImageStream
+          metadata:
+            name: "{{ moodle_prefix }}-web-image"
+            namespace: "{{ moodle_namespace }}"
+
+    # 6.2 BuildConfig que clona Moodle oficial sobre la imagen de PHP de Red Hat
+    - name: "Crear BuildConfig usando imagen PHP de Red Hat"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: build.openshift.io/v1
+          kind: BuildConfig
+          metadata:
+            name: "{{ moodle_prefix }}-web-build"
+            namespace: "{{ moodle_namespace }}"
+          spec:
+            source:
+              type: Git
+              git:
+                uri: "https://github.com/moodle/moodle.git"
+                ref: "MOODLE_403_STABLE" # O la rama oficial que prefieras
+            strategy:
+              type: Source
+              sourceStrategy:
+                from:
+                  kind: DockerImage
+                  name: "registry.redhat.io/ubi9/php-81:latest" # Imagen Oficial Red Hat
+            output:
+              to:
+                kind: ImageStreamTag
+                name: "{{ moodle_prefix }}-web-image:latest"
+
+    # 6.3 Deployment apuntando a la imagen generada por Red Hat
+    - name: "Desplegar Pod/Deployment de Moodle Web"
       kubernetes.core.k8s:
         state: present
         definition:
@@ -179,7 +217,7 @@
               spec:
                 containers:
                   - name: moodle
-                    image: docker.io/bitnami/moodle:4.3-debian-12
+                    image: "image-registry.openshift-image-registry.svc:5000/{{ moodle_namespace }}/{{ moodle_prefix }}-web-image:latest"
                     env:
                       - name: MOODLE_DATABASE_HOST
                         value: "{{ moodle_prefix }}-db-svc"
@@ -200,21 +238,12 @@
                           secretKeyRef:
                             name: "{{ moodle_prefix }}-db-secrets"
                             key: mysql-database
-                      - name: MOODLE_USERNAME
-                        value: "admin"
-                      - name: MOODLE_PASSWORD
-                        value: "MoodleAdmin2026!"
-                      - name: MOODLE_EMAIL
-                        value: "admin@example.com"
                     ports:
                       - containerPort: 8080
                         name: http
                     volumeMounts:
                       - name: moodle-data-vol
-                        mountPath: /bitnami/moodle
-                        subPath: moodle-app
-                      - name: moodle-data-vol
-                        mountPath: /bitnami/moodledata
+                        mountPath: /opt/app-root/src/moodledata
                         subPath: moodledata-files
                 volumes:
                   - name: moodle-data-vol
