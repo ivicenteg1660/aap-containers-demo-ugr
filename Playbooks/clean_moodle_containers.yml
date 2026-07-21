@@ -1,0 +1,81 @@
+---
+- name: Limpieza y Eliminación de Recursos Moodle en OpenShift
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - "../vars/moodle_stack_vars.yml"
+
+  tasks:
+    # 1. Eliminar Route
+    - name: "1. Eliminar Route de OpenShift"
+      kubernetes.core.k8s:
+        state: absent
+        api_version: route.openshift.io/v1
+        kind: Route
+        name: "{{ moodle_prefix }}-route"
+        namespace: "{{ moodle_namespace }}"
+      ignore_errors: true
+
+    # 2. Eliminar Services
+    - name: "2. Eliminar Services (Web y DB)"
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Service
+        name: "{{ item }}"
+        namespace: "{{ moodle_namespace }}"
+      loop:
+        - "{{ moodle_prefix }}-web-svc"
+        - "{{ moodle_prefix }}-db-svc"
+      ignore_errors: true
+
+    # 3. Eliminar Deployments (Pods)
+    - name: "3. Eliminar Deployments (Web y DB)"
+      kubernetes.core.k8s:
+        state: absent
+        api_version: apps/v1
+        kind: Deployment
+        name: "{{ item }}"
+        namespace: "{{ moodle_namespace }}"
+      loop:
+        - "{{ moodle_prefix }}-web"
+        - "{{ moodle_prefix }}-db"
+      ignore_errors: true
+
+    # 4. Eliminar Almacenamiento Persistente (PVCs)
+    - name: "4. Eliminar PersistentVolumeClaims (PVCs)"
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ item }}"
+        namespace: "{{ moodle_namespace }}"
+      loop:
+        - "{{ moodle_prefix }}-data-pvc"
+        - "{{ moodle_prefix }}-db-pvc"
+      ignore_errors: true
+
+    # 5. Eliminar Secrets
+    - name: "5. Eliminar Secret de credenciales"
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Secret
+        name: "{{ moodle_prefix }}-db-secrets"
+        namespace: "{{ moodle_namespace }}"
+      ignore_errors: true
+
+    # 6. Eliminar el Namespace
+    - name: "6. Eliminar el Namespace completo"
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Namespace
+        name: "{{ moodle_namespace }}"
+      when: delete_namespace | default(true) | bool
+      ignore_errors: true
+
+    - name: "Confirmar fin de la limpieza"
+      ansible.builtin.debug:
+        msg: "El entorno Moodle y el namespace '{{ moodle_namespace }}' han sido eliminados por completo."
