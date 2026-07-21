@@ -96,7 +96,7 @@
               spec:
                 containers:
                   - name: mariadb
-                    image: quay.io/bitnami/mariadb:latest
+                    image: registry.redhat.io/rhel9/mariadb-1011:latest
                     env:
                       - name: MARIADB_ROOT_PASSWORD
                         valueFrom:
